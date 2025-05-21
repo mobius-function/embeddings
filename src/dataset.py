@@ -18,7 +18,7 @@ def get_transforms(img_size=128, is_training=True):
         transforms.Compose: Composed transformations
     """
     if is_training:
-        # Training transformations with data augmentation
+        # Training data transformations with augmentation
         transform = transforms.Compose([
             transforms.Resize((img_size, img_size)),
             transforms.RandomHorizontalFlip(p=0.5),
@@ -27,7 +27,7 @@ def get_transforms(img_size=128, is_training=True):
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # Normalize to [-1, 1]
         ])
     else:
-        # Validation/test transformations without augmentation
+        # Validation/test data transformations without augmentation
         transform = transforms.Compose([
             transforms.Resize((img_size, img_size)),
             transforms.ToTensor(),
