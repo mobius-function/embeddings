@@ -1,62 +1,53 @@
-# src/encoder.py
-import torch
-import torch.nn as nn
-from facenet_pytorch import InceptionResnetV1
+import os
+import random
+import shutil
+from pathlib import Path
 
+# Source path (wide face extracted data)
+source_path = "data/faces/output"
 
-class FaceEncoder(nn.Module):
-    def __init__(self, pretrained='vggface2', embedding_size=512, device='cuda'):
-        """
-        Face encoder using FaceNet model.
+# Target paths
+train_path = "data/train"
+val_path = "data/val"
+test_path = "data/test"
 
-        Args:
-            pretrained (str): 'vggface2' or 'casia-webface' for pretrained weights
-            embedding_size (int): Size of the embedding vector
-            device (str): 'cuda' or 'cpu'
-        """
-        super(FaceEncoder, self).__init__()
+# Create directories if they don't exist
+os.makedirs(train_path, exist_ok=True)
+os.makedirs(val_path, exist_ok=True)
+os.makedirs(test_path, exist_ok=True)
 
-        # Load pretrained FaceNet model
-        self.facenet = InceptionResnetV1(pretrained=pretrained).to(device)
-        self.facenet.eval()  # Set to evaluation mode
+# Get all image files
+image_files = []
+for ext in ['.jpg', '.jpeg', '.png']:
+    image_files.extend(list(Path(source_path).glob(f'**/*{ext}')))
 
-        # Add projection layer if needed (to adjust embedding size)
-        self.projection = None
-        if embedding_size != 512:  # FaceNet outputs 512-dim embeddings
-            self.projection = nn.Linear(512, embedding_size)
+# Ensure we found images
+if not image_files:
+    print(f"No images found in {source_path}! Check file extensions and directory.")
+    exit(1)
 
-        self.device = device
+print(f"Found {len(image_files)} images")
 
-    def forward(self, x):
-        """
-        Extract face embeddings.
+# Shuffle the files
+random.shuffle(image_files)
 
-        Args:
-            x (torch.Tensor): Batch of face images [B, C, H, W]
+# Calculate split points (70% train, 15% val, 15% test)
+train_split = int(len(image_files) * 0.7)
+val_split = int(len(image_files) * 0.85)  # 70% + 15% = 85%
 
-        Returns:
-            torch.Tensor: Face embeddings [B, embedding_size]
-        """
-        with torch.no_grad():
-            embeddings = self.facenet(x)
+# Copy files to train directory
+for img_path in image_files[:train_split]:
+    shutil.copy(img_path, os.path.join(train_path, img_path.name))
 
-        if self.projection is not None:
-            embeddings = self.projection(embeddings)
+# Copy files to validation directory
+for img_path in image_files[train_split:val_split]:
+    shutil.copy(img_path, os.path.join(val_path, img_path.name))
 
-        return embeddings
+# Copy files to test directory
+for img_path in image_files[val_split:]:
+    shutil.copy(img_path, os.path.join(test_path, img_path.name))
 
-
-# Simple function to get the encoder
-def get_encoder(embedding_size=512, device='cuda'):
-    """
-    Returns a pre-trained face encoder.
-
-    Args:
-        embedding_size (int): Size of the embedding vector
-        device (str): 'cuda' or 'cpu'
-    """
-    return FaceEncoder(
-        pretrained='vggface2',  # VGGFace2 is more robust than CASIA-WebFace
-        embedding_size=embedding_size,
-        device=device
-    )
+print(f"Split {len(image_files)} images into:")
+print(f" - Training: {train_split} images")
+print(f" - Validation: {val_split - train_split} images")
+print(f" - Test: {len(image_files) - val_split} images")
