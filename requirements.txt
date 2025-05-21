@@ -1,0 +1,25 @@
+# Core libraries
+torch>=1.9.0
+torchvision>=0.10.0
+numpy>=1.19.5
+pillow>=8.2.0
+matplotlib>=3.4.2
+
+# Model-specific libraries
+facenet-pytorch>=2.5.2  # For face embeddings
+lpips>=0.1.4            # Perceptual loss
+einops>=0.4.1           # Useful for tensor operations
+
+# Training utilities
+wandb>=0.12.0           # Experiment tracking
+tqdm>=4.61.1            # Progress bars
+pyyaml>=5.4.1           # Configuration files
+tensorboard>=2.5.0      # Alternative logging
+
+# Data processing
+opencv-python>=4.5.3    # Image processing (optional)
+albumentations>=1.0.3   # Advanced augmentations (optional)
+
+# Jupyter notebooks
+jupyter>=1.0.0
+ipykernel>=6.0.0
