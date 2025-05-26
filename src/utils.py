@@ -26,7 +26,7 @@ def show_tensor_images(tensor_images, num_images=16, figsize=(15, 15)):
         tensor_images[:num_images],
         nrow=int(np.sqrt(num_images)),
         normalize=True,
-        range=(-1, 1)
+        value_range=(-1, 1)
     )
 
     # Convert to numpy and display

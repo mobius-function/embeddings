@@ -1,0 +1,46 @@
+Starting training for 100 epochs
+Epoch 1 Training:   0%|                                                                                                    | 0/541 [00:00<?, ?it/s]D:\embeddings\.venv\Lib\site-packages\torch\utils\data\dataloader.py:665: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  warnings.warn(warn_msg)
+Epoch 1 Training: 100%|████████████████████████████████████████████████| 541/541 [14:43<00:00,  1.63s/it, g_loss=0.437, l1=0.403, perceptual=0.337]
+Epoch 1 Validation: 100%|██████████████████████████████████████████████| 116/116 [02:09<00:00,  1.12s/it, g_loss=0.362, l1=0.329, perceptual=0.327]
+Epoch 1/100 completed
+Epoch 2 Training: 100%|██████████████████████████████████████████████████| 541/541 [09:40<00:00,  1.07s/it, g_loss=0.363, l1=0.33, perceptual=0.33]
+Epoch 2 Validation: 100%|██████████████████████████████████████████████| 116/116 [01:26<00:00,  1.34it/s, g_loss=0.347, l1=0.315, perceptual=0.317]
+Epoch 2/100 completed
+Epoch 3 Training: 100%|████████████████████████████████████████████████| 541/541 [09:03<00:00,  1.00s/it, g_loss=0.425, l1=0.388, perceptual=0.369]
+Epoch 3 Validation: 100%|██████████████████████████████████████████████| 116/116 [01:22<00:00,  1.40it/s, g_loss=0.346, l1=0.315, perceptual=0.306]
+Epoch 3/100 completed
+Epoch 4 Training: 100%|████████████████████████████████████████████████| 541/541 [08:50<00:00,  1.02it/s, g_loss=0.385, l1=0.351, perceptual=0.332]
+Epoch 4 Validation: 100%|██████████████████████████████████████████████| 116/116 [02:00<00:00,  1.04s/it, g_loss=0.342, l1=0.312, perceptual=0.301]
+Epoch 4/100 completed
+Epoch 5 Training: 100%|████████████████████████████████████████████████| 541/541 [13:58<00:00,  1.55s/it, g_loss=0.399, l1=0.368, perceptual=0.314]
+Epoch 5 Validation: 100%|██████████████████████████████████████████████| 116/116 [01:34<00:00,  1.22it/s, g_loss=0.335, l1=0.305, perceptual=0.302]
+Checkpoint saved at checkpoint_epoch_5.pth
+Epoch 5/100 completed
+Epoch 6 Training: 100%|████████████████████████████████████████████████| 541/541 [16:27<00:00,  1.83s/it, g_loss=0.448, l1=0.415, perceptual=0.331]
+Epoch 6 Validation: 100%|██████████████████████████████████████████████| 116/116 [02:34<00:00,  1.33s/it, g_loss=0.333, l1=0.303, perceptual=0.302]
+Epoch 6/100 completed
+Epoch 7 Training: 100%|████████████████████████████████████████████████| 541/541 [32:22<00:00,  3.59s/it, g_loss=0.452, l1=0.415, perceptual=0.372]
+Epoch 7 Validation: 100%|████████████████████████████████████████████████| 116/116 [04:24<00:00,  2.28s/it, g_loss=0.34, l1=0.31, perceptual=0.304]
+Epoch 7/100 completed
+Epoch 8 Training:  92%|████████████████████████████████████████████▎   | 500/541 [32:12<02:38,  3.87s/it, g_loss=0.423, l1=0.389, perceptual=0.336]
+Traceback (most recent call last):
+  File "D:\embeddings\main.py", line 58, in <module>
+    main()
+  File "D:\embeddings\main.py", line 54, in main
+    trainer.train()
+  File "D:\embeddings\src\train.py", line 123, in train
+    self._train_epoch(epoch)
+  File "D:\embeddings\src\train.py", line 196, in _train_epoch
+    self._save_samples(epoch, i, images, generated_images)
+  File "D:\embeddings\src\train.py", line 293, in _save_samples
+    f"{prefix}/samples": wandb.Image(grid)
+                         ^^^^^^^^^^^^^^^^^
+  File "D:\embeddings\.venv\Lib\site-packages\wandb\sdk\data_types\image.py", line 178, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type)
+  File "D:\embeddings\.venv\Lib\site-packages\wandb\sdk\data_types\image.py", line 338, in _initialize_from_data
+    self._image.save(tmp_path, transparency=None)
+  File "D:\embeddings\.venv\Lib\site-packages\PIL\Image.py", line 2576, in save
+    fp = builtins.open(filename, "w+b")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\dell\\AppData\\Local\\Temp\\tmpwpiwsizfwandb-media\\1utf20qv.png'

@@ -1,0 +1,24 @@
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_setup.py:_flush():70] Current SDK version is 0.19.11
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_setup.py:_flush():70] Configure stats pid to 27048
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_setup.py:_flush():70] Loading settings from C:\Users\dell\.config\wandb\settings
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_setup.py:_flush():70] Loading settings from D:\embeddings\wandb\settings
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_setup.py:_flush():70] Loading settings from environment variables
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:setup_run_log_directory():724] Logging user logs to D:\embeddings\wandb\run-20250526_115208-lsgulbma\logs\debug.log
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:setup_run_log_directory():725] Logging internal logs to D:\embeddings\wandb\run-20250526_115208-lsgulbma\logs\debug-internal.log
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:init():852] calling init triggers
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:init():857] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:init():893] starting backend
+2025-05-26 11:52:08,985 INFO    MainThread:27048 [wandb_init.py:init():897] sending inform_init request
+2025-05-26 11:52:09,080 INFO    MainThread:27048 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=spawn, using: spawn
+2025-05-26 11:52:09,090 INFO    MainThread:27048 [wandb_init.py:init():907] backend started and connected
+2025-05-26 11:52:09,093 INFO    MainThread:27048 [wandb_init.py:init():1005] updated telemetry
+2025-05-26 11:52:09,210 INFO    MainThread:27048 [wandb_init.py:init():1029] communicating run to backend with 90.0 second timeout
+2025-05-26 11:52:10,462 INFO    MainThread:27048 [wandb_init.py:init():1104] starting run threads in backend
+2025-05-26 11:52:14,282 INFO    MainThread:27048 [wandb_run.py:_console_start():2573] atexit reg
+2025-05-26 11:52:14,282 INFO    MainThread:27048 [wandb_run.py:_redirect():2421] redirect: wrap_raw
+2025-05-26 11:52:14,282 INFO    MainThread:27048 [wandb_run.py:_redirect():2490] Wrapping output streams.
+2025-05-26 11:52:14,282 INFO    MainThread:27048 [wandb_run.py:_redirect():2513] Redirects installed.
+2025-05-26 11:52:14,320 INFO    MainThread:27048 [wandb_init.py:init():1150] run started, returning control to user process
+2025-05-26 11:52:14,323 INFO    MainThread:27048 [wandb_run.py:_config_callback():1436] config_cb None None {'train_dir': 'data/train', 'val_dir': 'data/val', 'test_dir': 'data/test', 'output_dir': 'output', 'batch_size': 8, 'num_epochs': 100, 'lr': 0.0002, 'beta1': 0.5, 'lr_step_size': 20, 'lr_gamma': 0.5, 'num_workers': 4, 'seed': 42, 'embedding_size': 256, 'img_size': 128, 'perceptual_weight': 0.1, 'device': 'cpu', 'use_wandb': True, 'project_name': 'my-face-generation', 'run_name': 'experiment-1', 'log_freq': 10, 'sample_freq': 100, 'save_freq': 5}
+2025-05-26 14:25:08,307 INFO    MsgRouterThr:27048 [mailbox.py:close():129] [no run ID] Closing mailbox, abandoning 2 handles.

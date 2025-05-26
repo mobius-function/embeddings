@@ -269,10 +269,10 @@ class Trainer:
         # Create a grid of images
         sample_size = min(8, real_images.size(0))
         real_grid = vutils.make_grid(
-            real_images[:sample_size], nrow=4, normalize=True, range=(-1, 1)
+            real_images[:sample_size], nrow=4, normalize=True, value_range=(-1, 1)
         )
         fake_grid = vutils.make_grid(
-            fake_images[:sample_size], nrow=4, normalize=True, range=(-1, 1)
+            fake_images[:sample_size], nrow=4, normalize=True, value_range=(-1, 1)
         )
 
         # Combine real and fake grids
