@@ -4,6 +4,16 @@ import argparse
 from src.train import Config, Trainer
 
 
+def setup_wandb_temp_dir(output_dir):
+    """Setup custom W&B temporary directory to avoid Windows permission issues."""
+    wandb_temp_dir = os.path.join(output_dir, 'wandb_temp')
+    os.makedirs(wandb_temp_dir, exist_ok=True)
+    os.environ['WANDB_DIR'] = wandb_temp_dir
+    os.environ['WANDB_CACHE_DIR'] = wandb_temp_dir
+    print(f"W&B temp directory set to: {wandb_temp_dir}")
+    return wandb_temp_dir
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Face Generation Model')
 
@@ -48,6 +58,10 @@ def main():
 
     # Create output directories
     os.makedirs(config.output_dir, exist_ok=True)
+
+    # Setup W&B temp directory if using W&B (FIX FOR WINDOWS PERMISSION ISSUE)
+    if hasattr(config, 'use_wandb') and config.use_wandb:
+        setup_wandb_temp_dir(config.output_dir)
 
     # Create and run trainer
     trainer = Trainer(config)
