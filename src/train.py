@@ -6,6 +6,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import lpips
+import warnings
+
+# Suppress deprecation warnings from LPIPS/torchvision
+warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
 
 from src.dataset import FaceDataset, get_transforms
 from src.encoder import get_encoder
@@ -213,13 +217,13 @@ class Trainer:
             if i % self.config.log_freq == 0:
                 batch_step = epoch * len(self.train_loader) + i
                 metrics = {
-                    'loss_total': g_loss.item(),
-                    'loss_l1': l1.item(),
-                    'loss_perceptual': perceptual.item(),
-                    'batch': i,
-                    'epoch': epoch + 1
+                    'batch/loss_total': g_loss.item(),
+                    'batch/loss_l1': l1.item(),
+                    'batch/loss_perceptual': perceptual.item(),
+                    'batch/batch_idx': i,
+                    'batch/current_epoch': epoch + 1
                 }
-                self.wandb_manager.log_metrics(metrics, step=batch_step, prefix="train_batch")
+                self.wandb_manager.log_metrics(metrics, step=batch_step)
 
             # Save samples with meaningful names - MUCH CLEANER!
             if i % self.config.sample_freq == 0:
@@ -380,5 +384,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

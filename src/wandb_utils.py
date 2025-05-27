@@ -240,12 +240,12 @@ class WandbManager:
             if save_success and self.is_active():
                 if batch_idx is not None:
                     caption = f"Epoch {epoch}, Batch {batch_idx} - Top: Real, Bottom: Generated"
-                    step = epoch * 1000 + batch_idx
-                    log_key = f"{prefix}/samples"
+                    step = epoch * 10000 + batch_idx  # Consistent with batch logging
+                    log_key = f"samples/{prefix}"
                 else:
                     caption = f"Epoch {epoch} - Top: Real, Bottom: Generated"
-                    step = epoch
-                    log_key = f"{prefix}/samples"
+                    step = (epoch + 1) * 100000  # Use same epoch step offset
+                    log_key = f"samples/{prefix}"
 
                 # Try file method first, then tensor method as fallback
                 wandb_success = self.log_images_from_file(
