@@ -105,7 +105,7 @@ def main():
         trainer.train()
 
         print("\n" + "=" * 60)
-        print("✅ Training completed successfully!")
+        print("Training completed successfully!")
         print("=" * 60)
         print(f"Results saved in: {config.output_dir}")
         print(f"  - Checkpoints: {os.path.join(config.output_dir, 'checkpoints')}")
@@ -114,14 +114,16 @@ def main():
             print(f"  - W&B logs: {os.path.join(config.output_dir, config.wandb_folder)}")
 
     except KeyboardInterrupt:
-        print("\n⚠️  Training interrupted by user")
+        print("\nWarning: Training interrupted by user")
         print("Partial results may be saved in output directory")
 
     except Exception as e:
-        print(f"\n❌ Training failed: {e}")
+        print(f"\nError: Training failed: {e}")
         import traceback
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     main()
+
+

@@ -126,19 +126,41 @@ class Trainer:
             val_metrics = self._validate_epoch(epoch)
 
             # Learning rate step
+            current_lr = self.g_scheduler.get_last_lr()[0]
             self.g_scheduler.step()
 
-            # Log epoch metrics to W&B
-            self.wandb_manager.log_metrics(train_metrics, step=epoch, prefix="train_epoch")
-            self.wandb_manager.log_metrics(val_metrics, step=epoch, prefix="val_epoch")
+            # Log epoch metrics to W&B with proper step and cleaner names
+            epoch_step = epoch + 1
+
+            # Log training epoch averages
+            train_epoch_metrics = {
+                'loss_total': train_metrics['avg_g_loss'],
+                'loss_l1': train_metrics['avg_l1_loss'],
+                'loss_perceptual': train_metrics['avg_perceptual_loss'],
+                'learning_rate': current_lr,
+                'epoch': epoch_step
+            }
+            self.wandb_manager.log_metrics(train_epoch_metrics, step=epoch_step, prefix="train")
+
+            # Log validation epoch averages
+            val_epoch_metrics = {
+                'loss_total': val_metrics['avg_g_loss'],
+                'loss_l1': val_metrics['avg_l1_loss'],
+                'loss_perceptual': val_metrics['avg_perceptual_loss'],
+                'epoch': epoch_step
+            }
+            self.wandb_manager.log_metrics(val_epoch_metrics, step=epoch_step, prefix="val")
 
             # Save checkpoint
             if (epoch + 1) % self.config.save_freq == 0:
                 self._save_checkpoint(epoch)
 
             print(f"Epoch {epoch + 1}/{self.config.num_epochs} completed")
-            print(f"  Train Loss: {train_metrics['avg_g_loss']:.4f}")
-            print(f"  Val Loss: {val_metrics['avg_g_loss']:.4f}")
+            print(
+                f"  Train Loss: {train_metrics['avg_g_loss']:.4f} (L1: {train_metrics['avg_l1_loss']:.4f}, Perceptual: {train_metrics['avg_perceptual_loss']:.4f})")
+            print(
+                f"  Val Loss: {val_metrics['avg_g_loss']:.4f} (L1: {val_metrics['avg_l1_loss']:.4f}, Perceptual: {val_metrics['avg_perceptual_loss']:.4f})")
+            print(f"  Learning Rate: {current_lr:.6f}")
 
         # Cleanup W&B
         self.wandb_manager.cleanup()
@@ -187,15 +209,17 @@ class Trainer:
                 'perceptual': f"{perceptual.item():.4f}"
             })
 
-            # Log training metrics to W&B
+            # Log training metrics to W&B (batch-level)
             if i % self.config.log_freq == 0:
+                batch_step = epoch * len(self.train_loader) + i
                 metrics = {
-                    'g_loss': g_loss.item(),
-                    'l1_loss': l1.item(),
-                    'perceptual_loss': perceptual.item(),
+                    'loss_total': g_loss.item(),
+                    'loss_l1': l1.item(),
+                    'loss_perceptual': perceptual.item(),
+                    'batch': i,
+                    'epoch': epoch + 1
                 }
-                step = epoch * len(self.train_loader) + i
-                self.wandb_manager.log_metrics(metrics, step=step, prefix="train")
+                self.wandb_manager.log_metrics(metrics, step=batch_step, prefix="train_batch")
 
             # Save samples with meaningful names - MUCH CLEANER!
             if i % self.config.sample_freq == 0:
@@ -210,7 +234,7 @@ class Trainer:
                 )
 
                 if result['success']:
-                    print(f"✅ Saved training samples: {result['filename']}")
+                    print(f"Saved training samples: {result['filename']}")
 
         # Return average metrics for the epoch
         return {
@@ -271,7 +295,7 @@ class Trainer:
                 )
 
                 if result['success']:
-                    print(f"✅ Saved validation samples: {result['filename']}")
+                    print(f"Saved validation samples: {result['filename']}")
 
         # Return average metrics for the epoch
         return {
@@ -298,10 +322,10 @@ class Trainer:
             # Overwrite if exists (always keep latest)
             torch.save(checkpoint, filepath)
 
-            print(f"✅ Checkpoint saved: {filename}")
+            print(f"Checkpoint saved: {filename}")
 
         except Exception as e:
-            print(f"❌ Checkpoint saving failed: {e}")
+            print(f"Error: Checkpoint saving failed: {e}")
 
 
 # Configuration class
@@ -356,3 +380,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

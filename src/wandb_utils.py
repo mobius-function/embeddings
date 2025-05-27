@@ -74,17 +74,17 @@ class WandbManager:
                 dir=self.wandb_dirs['main']
             )
 
-            print(f"   W&B initialized successfully!")
+            print(f"W&B initialized successfully!")
             print(f"   Project: {self.config.project_name}")
             print(f"   Run: {self.config.run_name}")
             print(f"   URL: {self.wandb_run.url}")
 
         except ImportError:
-            print("W&B not installed. Run: pip install wandb")
+            print("Error: W&B not installed. Run: pip install wandb")
             self.wandb_run = None
 
         except Exception as e:
-            print(f"W&B initialization failed: {e}")
+            print(f"Error: W&B initialization failed: {e}")
             self.wandb_run = None
 
     def is_active(self):
@@ -109,7 +109,7 @@ class WandbManager:
             return True
 
         except Exception as e:
-            print(f"W&B metric logging failed: {e}")
+            print(f"Warning: W&B metric logging failed: {e}")
             return False
 
     def create_meaningful_filename(self, prefix, epoch, batch_idx=None, file_type="png"):
@@ -136,7 +136,7 @@ class WandbManager:
             return True
 
         except Exception as e:
-            print(f"Failed to save {filepath}: {e}")
+            print(f"Error: Failed to save {filepath}: {e}")
             return False
 
     def log_images_from_file(self, filepath, log_key, caption=None, step=None):
@@ -159,7 +159,7 @@ class WandbManager:
             return True
 
         except Exception as e:
-            print(f"W&B image logging failed: {e}")
+            print(f"Warning: W&B image logging failed: {e}")
             return False
 
     def log_images_from_tensor(self, grid_tensor, log_key, caption=None, step=None):
@@ -187,7 +187,7 @@ class WandbManager:
             return True
 
         except Exception as e:
-            print(f"W&B tensor logging failed: {e}")
+            print(f"Warning: W&B tensor logging failed: {e}")
             return False
 
     def create_image_grid(self, real_images, generated_images, nrow=4, max_images=8):
@@ -241,18 +241,20 @@ class WandbManager:
                 if batch_idx is not None:
                     caption = f"Epoch {epoch}, Batch {batch_idx} - Top: Real, Bottom: Generated"
                     step = epoch * 1000 + batch_idx
+                    log_key = f"{prefix}/samples"
                 else:
                     caption = f"Epoch {epoch} - Top: Real, Bottom: Generated"
                     step = epoch
+                    log_key = f"{prefix}/samples"
 
                 # Try file method first, then tensor method as fallback
                 wandb_success = self.log_images_from_file(
-                    filepath, f"{prefix}/samples", caption, step
+                    filepath, log_key, caption, step
                 )
 
                 if not wandb_success:
                     wandb_success = self.log_images_from_tensor(
-                        grid, f"{prefix}/samples", caption, step
+                        grid, log_key, caption, step
                     )
 
             return {
@@ -263,7 +265,7 @@ class WandbManager:
             }
 
         except Exception as e:
-            print(f"Sample saving failed: {e}")
+            print(f"Error: Sample saving failed: {e}")
             return {
                 'success': False,
                 'wandb_logged': False,
@@ -309,3 +311,4 @@ def initialize_wandb(project_name, run_name, config_dict, wandb_dir, mode="onlin
 
     manager = WandbManager(TempConfig())
     return manager.wandb_run
+
