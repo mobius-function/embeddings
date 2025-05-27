@@ -59,7 +59,7 @@ class WandbManager:
         os.environ['WANDB_START_METHOD'] = 'thread'
         os.environ['WANDB_CONSOLE'] = 'off'
 
-        print(f"✅ W&B environment configured in: {self.wandb_dirs['main']}")
+        print(f"W&B environment configured in: {self.wandb_dirs['main']}")
 
     def initialize(self):
         """Initialize W&B with error handling."""
@@ -74,17 +74,17 @@ class WandbManager:
                 dir=self.wandb_dirs['main']
             )
 
-            print(f"✅ W&B initialized successfully!")
+            print(f"   W&B initialized successfully!")
             print(f"   Project: {self.config.project_name}")
             print(f"   Run: {self.config.run_name}")
             print(f"   URL: {self.wandb_run.url}")
 
         except ImportError:
-            print("❌ W&B not installed. Run: pip install wandb")
+            print("W&B not installed. Run: pip install wandb")
             self.wandb_run = None
 
         except Exception as e:
-            print(f"❌ W&B initialization failed: {e}")
+            print(f"W&B initialization failed: {e}")
             self.wandb_run = None
 
     def is_active(self):
@@ -109,7 +109,7 @@ class WandbManager:
             return True
 
         except Exception as e:
-            print(f"⚠️  W&B metric logging failed: {e}")
+            print(f"W&B metric logging failed: {e}")
             return False
 
     def create_meaningful_filename(self, prefix, epoch, batch_idx=None, file_type="png"):
@@ -132,11 +132,11 @@ class WandbManager:
 
             # Save image
             vutils.save_image(grid_tensor, filepath, normalize=False)
-            print(f"✅ Saved: {filepath}")
+            print(f"Saved: {filepath}")
             return True
 
         except Exception as e:
-            print(f"❌ Failed to save {filepath}: {e}")
+            print(f"Failed to save {filepath}: {e}")
             return False
 
     def log_images_from_file(self, filepath, log_key, caption=None, step=None):
@@ -155,11 +155,11 @@ class WandbManager:
             else:
                 self.wandb_run.log(log_dict)
 
-            print(f"✅ Logged to W&B: {log_key}")
+            print(f"Logged to W&B: {log_key}")
             return True
 
         except Exception as e:
-            print(f"⚠️  W&B image logging failed: {e}")
+            print(f"W&B image logging failed: {e}")
             return False
 
     def log_images_from_tensor(self, grid_tensor, log_key, caption=None, step=None):
@@ -183,11 +183,11 @@ class WandbManager:
             else:
                 self.wandb_run.log(log_dict)
 
-            print(f"✅ Logged to W&B (tensor method): {log_key}")
+            print(f"Logged to W&B (tensor method): {log_key}")
             return True
 
         except Exception as e:
-            print(f"⚠️  W&B tensor logging failed: {e}")
+            print(f"W&B tensor logging failed: {e}")
             return False
 
     def create_image_grid(self, real_images, generated_images, nrow=4, max_images=8):
@@ -263,7 +263,7 @@ class WandbManager:
             }
 
         except Exception as e:
-            print(f"❌ Sample saving failed: {e}")
+            print(f"Sample saving failed: {e}")
             return {
                 'success': False,
                 'wandb_logged': False,
@@ -276,7 +276,7 @@ class WandbManager:
         if self.wandb_run is not None:
             try:
                 self.wandb_run.finish()
-                print("✅ W&B run finished successfully")
+                print("W&B run finished successfully")
             except:
                 pass
 
