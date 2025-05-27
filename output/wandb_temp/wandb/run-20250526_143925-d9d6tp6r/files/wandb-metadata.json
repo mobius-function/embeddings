@@ -1,0 +1,42 @@
+{
+  "os": "Windows-11-10.0.26100-SP0",
+  "python": "CPython 3.12.10",
+  "startedAt": "2025-05-26T09:09:26.096706Z",
+  "args": [
+    "--use_wandb",
+    "--project_name",
+    "face-generation",
+    "--run_name",
+    "exp-epoch-100-batch-16",
+    "--num_epochs",
+    "100",
+    "--batch_size",
+    "16"
+  ],
+  "program": "D:\\embeddings\\main.py",
+  "codePath": "main.py",
+  "git": {
+    "remote": "https://github.com/mobius-function/embeddings.git",
+    "commit": "fb3a783f3b85c7f53962a4485b11f1f8f9721253"
+  },
+  "email": "sumitgper@gmail.com",
+  "root": "output\\wandb_temp",
+  "host": "DESKTOP-3D4S4BI",
+  "executable": "D:\\embeddings\\.venv\\Scripts\\python.exe",
+  "codePathLocal": "main.py",
+  "cpu_count": 10,
+  "cpu_count_logical": 12,
+  "disk": {
+    "/": {
+      "total": "296351690752",
+      "used": "28137537536"
+    }
+  },
+  "memory": {
+    "total": "16849256448"
+  },
+  "cpu": {
+    "count": 10,
+    "countLogical": 12
+  }
+}

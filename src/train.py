@@ -4,14 +4,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import torchvision.utils as vutils
 from tqdm import tqdm
-import wandb
 import lpips
 
 from src.dataset import FaceDataset, get_transforms
 from src.encoder import get_encoder
 from src.generator import get_generator
+from src.wandb_utils import WandbManager
 
 
 class Trainer:
@@ -28,6 +27,9 @@ class Trainer:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.sample_dir, exist_ok=True)
 
+        # Initialize W&B manager (handles all W&B operations)
+        self.wandb_manager = WandbManager(config)
+
         # Initialize dataloaders
         self._init_dataloaders()
 
@@ -35,11 +37,6 @@ class Trainer:
         self._init_models()
         self._init_losses()
         self._init_optimizers()
-
-        # Initialize logging
-        if config.use_wandb:
-            wandb.init(project=config.project_name, name=config.run_name)
-            wandb.config.update(config)
 
     def _init_dataloaders(self):
         # Get transformations
@@ -79,6 +76,9 @@ class Trainer:
             num_workers=self.config.num_workers,
             pin_memory=True
         )
+
+        print(f"Training dataset: {len(train_dataset)} images")
+        print(f"Validation dataset: {len(val_dataset)} images")
 
     def _init_models(self):
         # Initialize encoder
@@ -120,7 +120,7 @@ class Trainer:
 
         for epoch in range(self.config.num_epochs):
             # Training phase
-            self._train_epoch(epoch)
+            train_metrics = self._train_epoch(epoch)
 
             # Validation phase
             val_metrics = self._validate_epoch(epoch)
@@ -128,15 +128,20 @@ class Trainer:
             # Learning rate step
             self.g_scheduler.step()
 
+            # Log epoch metrics to W&B
+            self.wandb_manager.log_metrics(train_metrics, step=epoch, prefix="train_epoch")
+            self.wandb_manager.log_metrics(val_metrics, step=epoch, prefix="val_epoch")
+
             # Save checkpoint
             if (epoch + 1) % self.config.save_freq == 0:
                 self._save_checkpoint(epoch)
 
-            # Log validation metrics
-            if self.config.use_wandb:
-                wandb.log({f"val/{k}": v for k, v in val_metrics.items()})
-
             print(f"Epoch {epoch + 1}/{self.config.num_epochs} completed")
+            print(f"  Train Loss: {train_metrics['avg_g_loss']:.4f}")
+            print(f"  Val Loss: {val_metrics['avg_g_loss']:.4f}")
+
+        # Cleanup W&B
+        self.wandb_manager.cleanup()
 
     def _train_epoch(self, epoch):
         self.generator.train()
@@ -177,37 +182,42 @@ class Trainer:
 
             # Update progress bar
             pbar.set_postfix({
-                'g_loss': g_loss.item(),
-                'l1': l1.item(),
-                'perceptual': perceptual.item()
+                'g_loss': f"{g_loss.item():.4f}",
+                'l1': f"{l1.item():.4f}",
+                'perceptual': f"{perceptual.item():.4f}"
             })
 
-            # Log training metrics
-            if self.config.use_wandb and i % self.config.log_freq == 0:
-                wandb.log({
-                    'train/g_loss': g_loss.item(),
-                    'train/l1_loss': l1.item(),
-                    'train/perceptual_loss': perceptual.item(),
-                    'train/step': epoch * len(self.train_loader) + i
-                })
+            # Log training metrics to W&B
+            if i % self.config.log_freq == 0:
+                metrics = {
+                    'g_loss': g_loss.item(),
+                    'l1_loss': l1.item(),
+                    'perceptual_loss': perceptual.item(),
+                }
+                step = epoch * len(self.train_loader) + i
+                self.wandb_manager.log_metrics(metrics, step=step, prefix="train")
 
-            # Save samples
+            # Save samples with meaningful names - MUCH CLEANER!
             if i % self.config.sample_freq == 0:
-                self._save_samples(epoch, i, images, generated_images)
+                result = self.wandb_manager.save_and_log_samples(
+                    real_images=images,
+                    generated_images=generated_images,
+                    sample_dir=self.sample_dir,
+                    epoch=epoch,
+                    batch_idx=i,
+                    prefix="train",
+                    overwrite=self.config.overwrite_samples
+                )
 
-        # Compute average losses for the epoch
-        avg_g_loss = total_g_loss / len(self.train_loader)
-        avg_l1_loss = total_l1_loss / len(self.train_loader)
-        avg_perceptual_loss = total_perceptual_loss / len(self.train_loader)
+                if result['success']:
+                    print(f"✅ Saved training samples: {result['filename']}")
 
-        # Log epoch metrics
-        if self.config.use_wandb:
-            wandb.log({
-                'train/epoch': epoch,
-                'train/avg_g_loss': avg_g_loss,
-                'train/avg_l1_loss': avg_l1_loss,
-                'train/avg_perceptual_loss': avg_perceptual_loss
-            })
+        # Return average metrics for the epoch
+        return {
+            'avg_g_loss': total_g_loss / len(self.train_loader),
+            'avg_l1_loss': total_l1_loss / len(self.train_loader),
+            'avg_perceptual_loss': total_perceptual_loss / len(self.train_loader)
+        }
 
     def _validate_epoch(self, epoch):
         self.generator.eval()
@@ -243,73 +253,55 @@ class Trainer:
 
                 # Update progress bar
                 pbar.set_postfix({
-                    'g_loss': g_loss.item(),
-                    'l1': l1.item(),
-                    'perceptual': perceptual.item()
+                    'g_loss': f"{g_loss.item():.4f}",
+                    'l1': f"{l1.item():.4f}",
+                    'perceptual': f"{perceptual.item():.4f}"
                 })
 
-            # Save validation samples
+            # Save validation samples with meaningful names
             if len(self.val_loader) > 0:
-                self._save_samples(epoch, 0, images, generated_images, is_validation=True)
+                result = self.wandb_manager.save_and_log_samples(
+                    real_images=images,
+                    generated_images=generated_images,
+                    sample_dir=self.sample_dir,
+                    epoch=epoch,
+                    batch_idx=None,  # No batch index for validation
+                    prefix="val",
+                    overwrite=self.config.overwrite_samples
+                )
 
-        # Compute average losses for the epoch
-        avg_g_loss = total_g_loss / len(self.val_loader)
-        avg_l1_loss = total_l1_loss / len(self.val_loader)
-        avg_perceptual_loss = total_perceptual_loss / len(self.val_loader)
+                if result['success']:
+                    print(f"✅ Saved validation samples: {result['filename']}")
 
-        # Return metrics
+        # Return average metrics for the epoch
         return {
-            'avg_g_loss': avg_g_loss,
-            'avg_l1_loss': avg_l1_loss,
-            'avg_perceptual_loss': avg_perceptual_loss
+            'avg_g_loss': total_g_loss / len(self.val_loader),
+            'avg_l1_loss': total_l1_loss / len(self.val_loader),
+            'avg_perceptual_loss': total_perceptual_loss / len(self.val_loader)
         }
-
-    def _save_samples(self, epoch, batch_idx, real_images, fake_images, is_validation=False):
-        """Save image samples during training."""
-        # Create a grid of images
-        sample_size = min(8, real_images.size(0))
-        real_grid = vutils.make_grid(
-            real_images[:sample_size], nrow=4, normalize=True, value_range=(-1, 1)
-        )
-        fake_grid = vutils.make_grid(
-            fake_images[:sample_size], nrow=4, normalize=True, value_range=(-1, 1)
-        )
-
-        # Combine real and fake grids
-        grid = torch.cat((real_grid, fake_grid), dim=1)
-
-        # Save to file
-        prefix = 'val' if is_validation else 'train'
-        filename = f"{prefix}_samples_epoch_{epoch + 1}_batch_{batch_idx}.png"
-        vutils.save_image(
-            grid,
-            os.path.join(self.sample_dir, filename),
-            normalize=False
-        )
-
-        # Log to wandb
-        if self.config.use_wandb:
-            wandb.log({
-                f"{prefix}/samples": wandb.Image(grid)
-            })
 
     def _save_checkpoint(self, epoch):
-        """Save model checkpoint."""
-        checkpoint = {
-            'epoch': epoch,
-            'generator': self.generator.state_dict(),
-            'g_optimizer': self.g_optimizer.state_dict(),
-            'g_scheduler': self.g_scheduler.state_dict(),
-            'config': self.config
-        }
+        """Save model checkpoint with meaningful name."""
+        try:
+            checkpoint = {
+                'epoch': epoch,
+                'generator': self.generator.state_dict(),
+                'g_optimizer': self.g_optimizer.state_dict(),
+                'g_scheduler': self.g_scheduler.state_dict(),
+                'config': vars(self.config)
+            }
 
-        filename = f"checkpoint_epoch_{epoch + 1}.pth"
-        torch.save(
-            checkpoint,
-            os.path.join(self.checkpoint_dir, filename)
-        )
+            # Use meaningful filename
+            filename = f"checkpoint_epoch_{epoch + 1:03d}.pth"
+            filepath = os.path.join(self.checkpoint_dir, filename)
 
-        print(f"Checkpoint saved at {filename}")
+            # Overwrite if exists (always keep latest)
+            torch.save(checkpoint, filepath)
+
+            print(f"✅ Checkpoint saved: {filename}")
+
+        except Exception as e:
+            print(f"❌ Checkpoint saving failed: {e}")
 
 
 # Configuration class
@@ -341,13 +333,18 @@ class Config:
         # Device settings
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # Logging and checkpoints
+        # W&B and logging settings
         self.use_wandb = True
         self.project_name = "face-generation"
         self.run_name = f"face-gen-{self.embedding_size}-{self.img_size}"
+        self.wandb_folder = "wandb"  # W&B folder in output directory
+        self.wandb_mode = "online"  # online, offline, disabled
         self.log_freq = 10
         self.sample_freq = 100
         self.save_freq = 5
+
+        # File management
+        self.overwrite_samples = True  # Overwrite existing sample files
 
 
 # Main function to start training
@@ -359,4 +356,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

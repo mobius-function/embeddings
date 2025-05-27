@@ -1,0 +1,14 @@
+{"time":"2025-05-26T14:39:24.9625913+05:30","level":"INFO","msg":"main: starting server","port-filename":"C:\\Users\\dell\\AppData\\Local\\Temp\\tmpkiajgc5a\\port-5716.txt","pid":5716,"log-level":0,"disable-analytics":false,"shutdown-on-parent-exit":false,"enable-dcgm-profiling":false}
+{"time":"2025-05-26T14:39:24.9667716+05:30","level":"INFO","msg":"server is running","addr":{"IP":"127.0.0.1","Port":59714,"Zone":""}}
+{"time":"2025-05-26T14:39:24.9674289+05:30","level":"INFO","msg":"Will exit if parent process dies.","ppid":5716}
+{"time":"2025-05-26T14:39:25.1196818+05:30","level":"INFO","msg":"connection: ManageConnectionData: new connection created","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T14:39:26.1007293+05:30","level":"INFO","msg":"handleInformInit: received","streamId":"d9d6tp6r","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T14:39:26.1057033+05:30","level":"ERROR","msg":"error creating symlink","error":"symlink D:\\embeddings\\output\\wandb_temp\\wandb\\logs\\core-debug-20250526_143924.log output\\wandb_temp\\wandb\\run-20250526_143925-d9d6tp6r\\logs\\debug-core.log: A required privilege is not held by the client."}
+{"time":"2025-05-26T14:39:26.6485913+05:30","level":"INFO","msg":"handleInformInit: stream started","streamId":"d9d6tp6r","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:00.6539881+05:30","level":"INFO","msg":"handleInformTeardown: server teardown initiated","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:00.6544976+05:30","level":"INFO","msg":"server is shutting down"}
+{"time":"2025-05-26T21:44:00.6544976+05:30","level":"INFO","msg":"connection: closing","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:00.6574067+05:30","level":"INFO","msg":"connection: closed successfully","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:02.1267262+05:30","level":"INFO","msg":"handleInformTeardown: server shutdown complete","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:02.1373902+05:30","level":"INFO","msg":"connection: ManageConnectionData: connection closed","id":"127.0.0.1:59715"}
+{"time":"2025-05-26T21:44:02.1373902+05:30","level":"INFO","msg":"server is closed"}
