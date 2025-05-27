@@ -10,6 +10,10 @@ import warnings
 
 # Suppress deprecation warnings from LPIPS/torchvision
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
+# Suppress specific UserWarning from LPIPS about adaptive_avg_pool2d anticausal tensor
+warnings.filterwarnings("ignore",
+                        message="The default behavior for interpolate/upsample with float scale_factor changed.*",
+                        module="torch.nn.functional")
 
 from src.dataset import FaceDataset, get_transforms
 from src.encoder import get_encoder
@@ -22,312 +26,212 @@ class Trainer:
         self.config = config
         self.device = torch.device(config.device)
 
-        # Set random seed for reproducibility
         torch.manual_seed(config.seed)
 
-        # Initialize directories
         self.checkpoint_dir = os.path.join(config.output_dir, 'checkpoints')
         self.sample_dir = os.path.join(config.output_dir, 'samples')
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.sample_dir, exist_ok=True)
 
-        # Initialize W&B manager (handles all W&B operations)
-        self.wandb_manager = WandbManager(config)
+        self.wandb_manager = WandbManager(config)  # Initializes W&B and defines metrics
 
-        # Initialize dataloaders
         self._init_dataloaders()
-
-        # Initialize models, losses, and optimizers
         self._init_models()
         self._init_losses()
         self._init_optimizers()
 
+        self.current_global_step = 0  # Initialize a global step counter for the trainer
+
     def _init_dataloaders(self):
-        # Get transformations
-        train_transform = get_transforms(
-            img_size=self.config.img_size,
-            is_training=True
-        )
-        val_transform = get_transforms(
-            img_size=self.config.img_size,
-            is_training=False
-        )
-
-        # Create datasets
-        train_dataset = FaceDataset(
-            image_dir=self.config.train_dir,
-            transform=train_transform
-        )
-
-        val_dataset = FaceDataset(
-            image_dir=self.config.val_dir,
-            transform=val_transform
-        )
-
-        # Create dataloaders
-        self.train_loader = DataLoader(
-            train_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            num_workers=self.config.num_workers,
-            pin_memory=True
-        )
-
-        self.val_loader = DataLoader(
-            val_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=False,
-            num_workers=self.config.num_workers,
-            pin_memory=True
-        )
-
-        print(f"Training dataset: {len(train_dataset)} images")
-        print(f"Validation dataset: {len(val_dataset)} images")
+        train_transform = get_transforms(img_size=self.config.img_size, is_training=True)
+        val_transform = get_transforms(img_size=self.config.img_size, is_training=False)
+        train_dataset = FaceDataset(image_dir=self.config.train_dir, transform=train_transform)
+        val_dataset = FaceDataset(image_dir=self.config.val_dir, transform=val_transform)
+        self.train_loader = DataLoader(train_dataset, batch_size=self.config.batch_size, shuffle=True,
+                                       num_workers=self.config.num_workers, pin_memory=True, drop_last=True)
+        self.val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size, shuffle=False,
+                                     num_workers=self.config.num_workers, pin_memory=True, drop_last=False)
+        print(f"Training dataset: {len(train_dataset)} images, Batches: {len(self.train_loader)}")
+        print(f"Validation dataset: {len(val_dataset)} images, Batches: {len(self.val_loader)}")
 
     def _init_models(self):
-        # Initialize encoder
-        self.encoder = get_encoder(
-            embedding_size=self.config.embedding_size,
-            device=self.device
-        )
-
-        # Initialize generator
-        self.generator = get_generator(
-            embedding_size=self.config.embedding_size,
-            device=self.device
-        )
+        self.encoder = get_encoder(embedding_size=self.config.embedding_size, device=self.device)
+        self.generator = get_generator(embedding_size=self.config.embedding_size, device=self.device)
 
     def _init_losses(self):
-        # L1 loss for pixel-wise reconstruction
         self.l1_loss = nn.L1Loss()
-
-        # LPIPS for perceptual loss
         self.perceptual_loss = lpips.LPIPS(net='alex').to(self.device)
 
     def _init_optimizers(self):
-        # Optimizer for generator
-        self.g_optimizer = optim.Adam(
-            self.generator.parameters(),
-            lr=self.config.lr,
-            betas=(self.config.beta1, 0.999)
-        )
-
-        # Learning rate schedulers
-        self.g_scheduler = optim.lr_scheduler.StepLR(
-            self.g_optimizer,
-            step_size=self.config.lr_step_size,
-            gamma=self.config.lr_gamma
-        )
+        self.g_optimizer = optim.Adam(self.generator.parameters(), lr=self.config.lr, betas=(self.config.beta1, 0.999))
+        self.g_scheduler = optim.lr_scheduler.StepLR(self.g_optimizer, step_size=self.config.lr_step_size,
+                                                     gamma=self.config.lr_gamma)
 
     def train(self):
-        print(f"Starting training for {self.config.num_epochs} epochs")
+        print(f"Starting training for {self.config.num_epochs} epochs on {self.device}")
+        # Reset global step at the beginning of a new training run if needed,
+        # or load from checkpoint. For this fix, assuming it starts from 0 or loads.
+        # self.current_global_step = initial_step_from_checkpoint_or_0
 
-        for epoch in range(self.config.num_epochs):
+        for epoch in range(self.config.num_epochs):  # epoch is 0-indexed
             # Training phase
             train_metrics = self._train_epoch(epoch)
 
-            # Validation phase
-            val_metrics = self._validate_epoch(epoch)
+            # Validation phase (pass current_global_step for sample logging)
+            val_metrics = self._validate_epoch(epoch, self.current_global_step)
 
-            # Learning rate step
             current_lr = self.g_scheduler.get_last_lr()[0]
-            self.g_scheduler.step()
+            self.g_scheduler.step()  # Step the scheduler after validation and logging
 
-            # Log epoch metrics to W&B with proper step and cleaner names
-            epoch_step = epoch + 1
+            # For epoch-level metrics, the `step` argument to log_metrics will be
+            # self.current_global_step (the latest batch step).
+            # The 'epoch' key in the dictionary will be used for the custom x-axis.
+            epoch_num_for_axis = epoch + 1  # 1-indexed epoch number for plotting
 
-            # Log training epoch averages
-            train_epoch_metrics = {
+            train_epoch_log_data = {
                 'loss_total': train_metrics['avg_g_loss'],
                 'loss_l1': train_metrics['avg_l1_loss'],
                 'loss_perceptual': train_metrics['avg_perceptual_loss'],
                 'learning_rate': current_lr,
-                'epoch': epoch_step
+                'epoch': epoch_num_for_axis  # This provides data for 'train/epoch' x-axis
             }
-            self.wandb_manager.log_metrics(train_epoch_metrics, step=epoch_step, prefix="train")
+            self.wandb_manager.log_metrics(train_epoch_log_data, step=self.current_global_step, prefix="train")
 
-            # Log validation epoch averages
-            val_epoch_metrics = {
+            val_epoch_log_data = {
                 'loss_total': val_metrics['avg_g_loss'],
                 'loss_l1': val_metrics['avg_l1_loss'],
                 'loss_perceptual': val_metrics['avg_perceptual_loss'],
-                'epoch': epoch_step
+                'epoch': epoch_num_for_axis  # This provides data for 'val/epoch' x-axis
             }
-            self.wandb_manager.log_metrics(val_epoch_metrics, step=epoch_step, prefix="val")
+            self.wandb_manager.log_metrics(val_epoch_log_data, step=self.current_global_step, prefix="val")
 
-            # Save checkpoint
             if (epoch + 1) % self.config.save_freq == 0:
                 self._save_checkpoint(epoch)
 
-            print(f"Epoch {epoch + 1}/{self.config.num_epochs} completed")
+            print(f"Epoch {epoch + 1}/{self.config.num_epochs} completed. Global Step: {self.current_global_step}")
             print(
                 f"  Train Loss: {train_metrics['avg_g_loss']:.4f} (L1: {train_metrics['avg_l1_loss']:.4f}, Perceptual: {train_metrics['avg_perceptual_loss']:.4f})")
-            print(
-                f"  Val Loss: {val_metrics['avg_g_loss']:.4f} (L1: {val_metrics['avg_l1_loss']:.4f}, Perceptual: {val_metrics['avg_perceptual_loss']:.4f})")
+            if len(self.val_loader) > 0:
+                print(
+                    f"  Val Loss: {val_metrics['avg_g_loss']:.4f} (L1: {val_metrics['avg_l1_loss']:.4f}, Perceptual: {val_metrics['avg_perceptual_loss']:.4f})")
             print(f"  Learning Rate: {current_lr:.6f}")
 
-        # Cleanup W&B
         self.wandb_manager.cleanup()
 
-    def _train_epoch(self, epoch):
+    def _train_epoch(self, epoch):  # epoch is 0-indexed
         self.generator.train()
+        total_g_loss, total_l1_loss, total_perceptual_loss = 0, 0, 0
 
-        total_g_loss = 0
-        total_l1_loss = 0
-        total_perceptual_loss = 0
+        # Calculate starting global step for this epoch if not using self.current_global_step directly for batches
+        # For simplicity, self.current_global_step will be incremented inside the loop.
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1} Training")
-
         for i, images in enumerate(pbar):
-            # Move images to device
             images = images.to(self.device)
-
-            # Extract embeddings
             with torch.no_grad():
                 embeddings = self.encoder(images)
-
-            # Generate images from embeddings
             generated_images = self.generator(embeddings)
 
-            # Compute losses
             l1 = self.l1_loss(generated_images, images)
             perceptual = self.perceptual_loss(generated_images, images).mean()
-
-            # Total generator loss
             g_loss = l1 + self.config.perceptual_weight * perceptual
 
-            # Update generator
             self.g_optimizer.zero_grad()
             g_loss.backward()
             self.g_optimizer.step()
 
-            # Update metrics
             total_g_loss += g_loss.item()
             total_l1_loss += l1.item()
             total_perceptual_loss += perceptual.item()
 
-            # Update progress bar
-            pbar.set_postfix({
-                'g_loss': f"{g_loss.item():.4f}",
-                'l1': f"{l1.item():.4f}",
-                'perceptual': f"{perceptual.item():.4f}"
-            })
+            self.current_global_step += 1  # Increment global step for each training batch processed.
+            # Assumes drop_last=True or careful handling if batch size varies.
+            # Or: self.current_global_step = epoch * len(self.train_loader) + i
 
-            # Log training metrics to W&B (batch-level)
+            pbar.set_postfix(
+                {'g_loss': f"{g_loss.item():.4f}", 'l1': f"{l1.item():.4f}", 'perceptual': f"{perceptual.item():.4f}"})
+
             if i % self.config.log_freq == 0:
-                batch_step = epoch * len(self.train_loader) + i
-                metrics = {
-                    'batch/loss_total': g_loss.item(),
-                    'batch/loss_l1': l1.item(),
-                    'batch/loss_perceptual': perceptual.item(),
-                    'batch/batch_idx': i,
-                    'batch/current_epoch': epoch + 1
+                batch_metrics = {
+                    # Prefixes are handled by WandbManager or explicitly added here
+                    # Keep keys simple if WandbManager adds 'batch/' prefix
+                    'loss_total': g_loss.item(),
+                    'loss_l1': l1.item(),
+                    'loss_perceptual': perceptual.item(),
+                    # 'batch_idx': i, # Informative but not essential for plotting if global step is primary x-axis
+                    # 'current_epoch': epoch + 1 # Also informative
                 }
-                self.wandb_manager.log_metrics(metrics, step=batch_step)
+                self.wandb_manager.log_metrics(batch_metrics, step=self.current_global_step, prefix="batch")
 
-            # Save samples with meaningful names - MUCH CLEANER!
             if i % self.config.sample_freq == 0:
-                result = self.wandb_manager.save_and_log_samples(
-                    real_images=images,
-                    generated_images=generated_images,
-                    sample_dir=self.sample_dir,
-                    epoch=epoch,
-                    batch_idx=i,
-                    prefix="train",
-                    overwrite=self.config.overwrite_samples
+                self.wandb_manager.save_and_log_samples(
+                    real_images=images, generated_images=generated_images,
+                    sample_dir=self.sample_dir, epoch=epoch, batch_idx=i,
+                    current_global_step=self.current_global_step,  # Pass the current global step
+                    prefix="train", overwrite=self.config.overwrite_samples
                 )
 
-                if result['success']:
-                    print(f"Saved training samples: {result['filename']}")
-
-        # Return average metrics for the epoch
+        num_batches = len(self.train_loader)
         return {
-            'avg_g_loss': total_g_loss / len(self.train_loader),
-            'avg_l1_loss': total_l1_loss / len(self.train_loader),
-            'avg_perceptual_loss': total_perceptual_loss / len(self.train_loader)
+            'avg_g_loss': total_g_loss / num_batches if num_batches > 0 else 0,
+            'avg_l1_loss': total_l1_loss / num_batches if num_batches > 0 else 0,
+            'avg_perceptual_loss': total_perceptual_loss / num_batches if num_batches > 0 else 0
         }
 
-    def _validate_epoch(self, epoch):
-        self.generator.eval()
+    def _validate_epoch(self, epoch, current_global_step_for_summary):  # epoch is 0-indexed
+        if not self.val_loader:  # Skip if no validation loader
+            return {'avg_g_loss': 0, 'avg_l1_loss': 0, 'avg_perceptual_loss': 0}
 
-        total_g_loss = 0
-        total_l1_loss = 0
-        total_perceptual_loss = 0
+        self.generator.eval()
+        total_g_loss, total_l1_loss, total_perceptual_loss = 0, 0, 0
 
         pbar = tqdm(self.val_loader, desc=f"Epoch {epoch + 1} Validation")
 
         with torch.no_grad():
             for i, images in enumerate(pbar):
-                # Move images to device
                 images = images.to(self.device)
-
-                # Extract embeddings
                 embeddings = self.encoder(images)
-
-                # Generate images from embeddings
                 generated_images = self.generator(embeddings)
 
-                # Compute losses
                 l1 = self.l1_loss(generated_images, images)
                 perceptual = self.perceptual_loss(generated_images, images).mean()
-
-                # Total generator loss
                 g_loss = l1 + self.config.perceptual_weight * perceptual
 
-                # Update metrics
                 total_g_loss += g_loss.item()
                 total_l1_loss += l1.item()
                 total_perceptual_loss += perceptual.item()
+                pbar.set_postfix({'g_loss': f"{g_loss.item():.4f}", 'l1': f"{l1.item():.4f}",
+                                  'perceptual': f"{perceptual.item():.4f}"})
 
-                # Update progress bar
-                pbar.set_postfix({
-                    'g_loss': f"{g_loss.item():.4f}",
-                    'l1': f"{l1.item():.4f}",
-                    'perceptual': f"{perceptual.item():.4f}"
-                })
-
-            # Save validation samples with meaningful names
-            if len(self.val_loader) > 0:
-                result = self.wandb_manager.save_and_log_samples(
-                    real_images=images,
-                    generated_images=generated_images,
-                    sample_dir=self.sample_dir,
-                    epoch=epoch,
-                    batch_idx=None,  # No batch index for validation
-                    prefix="val",
-                    overwrite=self.config.overwrite_samples
+            if len(self.val_loader) > 0:  # Log samples using last batch of val images
+                self.wandb_manager.save_and_log_samples(
+                    real_images=images, generated_images=generated_images,
+                    sample_dir=self.sample_dir, epoch=epoch, batch_idx=None,
+                    current_global_step=current_global_step_for_summary,  # Use the passed global step
+                    prefix="val", overwrite=self.config.overwrite_samples
                 )
 
-                if result['success']:
-                    print(f"Saved validation samples: {result['filename']}")
-
-        # Return average metrics for the epoch
+        num_batches = len(self.val_loader)
         return {
-            'avg_g_loss': total_g_loss / len(self.val_loader),
-            'avg_l1_loss': total_l1_loss / len(self.val_loader),
-            'avg_perceptual_loss': total_perceptual_loss / len(self.val_loader)
+            'avg_g_loss': total_g_loss / num_batches if num_batches > 0 else 0,
+            'avg_l1_loss': total_l1_loss / num_batches if num_batches > 0 else 0,
+            'avg_perceptual_loss': total_perceptual_loss / num_batches if num_batches > 0 else 0
         }
 
-    def _save_checkpoint(self, epoch):
-        """Save model checkpoint with meaningful name."""
+    def _save_checkpoint(self, epoch):  # epoch is 0-indexed
         try:
             checkpoint = {
                 'epoch': epoch,
+                'current_global_step': self.current_global_step,  # Save global step
                 'generator': self.generator.state_dict(),
                 'g_optimizer': self.g_optimizer.state_dict(),
                 'g_scheduler': self.g_scheduler.state_dict(),
                 'config': vars(self.config)
             }
-
-            # Use meaningful filename
             filename = f"checkpoint_epoch_{epoch + 1:03d}.pth"
             filepath = os.path.join(self.checkpoint_dir, filename)
-
-            # Overwrite if exists (always keep latest)
             torch.save(checkpoint, filepath)
-
-            print(f"Checkpoint saved: {filename}")
-
+            print(f"Checkpoint saved: {filename} at global step {self.current_global_step}")
         except Exception as e:
             print(f"Error: Checkpoint saving failed: {e}")
 
