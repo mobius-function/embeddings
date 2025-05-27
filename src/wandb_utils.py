@@ -280,7 +280,7 @@ class WandbManager:
                 self.wandb_run.finish()
                 print("W&B run finished successfully")
             except:
-                pass
+                self.global_step = 0
 
 
 # Convenience functions for backward compatibility
