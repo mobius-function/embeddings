@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore",
 from src.dataset import FaceDataset, get_transforms
 from src.encoder import get_encoder
 from src.generator import get_generator
-from src.wandb_utils import WandbManager
+from src.wandb_utils import WandbManager  # Ensure this path is correct
 
 
 class Trainer:
@@ -40,17 +40,27 @@ class Trainer:
         self._init_losses()
         self._init_optimizers()
 
-        self.current_global_step = 0  # Initialize a global step counter for the trainer
+        # Initialize global step. This will be incremented for each batch.
+        # If loading from a checkpoint, this should be restored.
+        self.current_global_step = 0
 
     def _init_dataloaders(self):
         train_transform = get_transforms(img_size=self.config.img_size, is_training=True)
         val_transform = get_transforms(img_size=self.config.img_size, is_training=False)
         train_dataset = FaceDataset(image_dir=self.config.train_dir, transform=train_transform)
         val_dataset = FaceDataset(image_dir=self.config.val_dir, transform=val_transform)
-        self.train_loader = DataLoader(train_dataset, batch_size=self.config.batch_size, shuffle=True,
-                                       num_workers=self.config.num_workers, pin_memory=True, drop_last=True)
-        self.val_loader = DataLoader(val_dataset, batch_size=self.config.batch_size, shuffle=False,
-                                     num_workers=self.config.num_workers, pin_memory=True, drop_last=False)
+
+        # drop_last=True for train_loader ensures consistent batch sizes for step counting,
+        # otherwise, the last batch could be smaller.
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=self.config.batch_size, shuffle=True,
+            num_workers=self.config.num_workers, pin_memory=True, drop_last=True
+        )
+        self.val_loader = DataLoader(
+            val_dataset, batch_size=self.config.batch_size, shuffle=False,
+            num_workers=self.config.num_workers, pin_memory=True, drop_last=False
+        )  # drop_last=False for val is typical
+
         print(f"Training dataset: {len(train_dataset)} images, Batches: {len(self.train_loader)}")
         print(f"Validation dataset: {len(val_dataset)} images, Batches: {len(self.val_loader)}")
 
@@ -69,23 +79,19 @@ class Trainer:
 
     def train(self):
         print(f"Starting training for {self.config.num_epochs} epochs on {self.device}")
-        # Reset global step at the beginning of a new training run if needed,
-        # or load from checkpoint. For this fix, assuming it starts from 0 or loads.
-        # self.current_global_step = initial_step_from_checkpoint_or_0
+        # If resuming, self.current_global_step and epoch should be loaded from checkpoint
 
         for epoch in range(self.config.num_epochs):  # epoch is 0-indexed
             # Training phase
             train_metrics = self._train_epoch(epoch)
 
-            # Validation phase (pass current_global_step for sample logging)
+            # Validation phase (pass current_global_step for sample logging consistency)
             val_metrics = self._validate_epoch(epoch, self.current_global_step)
 
             current_lr = self.g_scheduler.get_last_lr()[0]
-            self.g_scheduler.step()  # Step the scheduler after validation and logging
+            # Step the scheduler after validation and logging for the current epoch's state
+            self.g_scheduler.step()
 
-            # For epoch-level metrics, the `step` argument to log_metrics will be
-            # self.current_global_step (the latest batch step).
-            # The 'epoch' key in the dictionary will be used for the custom x-axis.
             epoch_num_for_axis = epoch + 1  # 1-indexed epoch number for plotting
 
             train_epoch_log_data = {
@@ -93,17 +99,18 @@ class Trainer:
                 'loss_l1': train_metrics['avg_l1_loss'],
                 'loss_perceptual': train_metrics['avg_perceptual_loss'],
                 'learning_rate': current_lr,
-                'epoch': epoch_num_for_axis  # This provides data for 'train/epoch' x-axis
+                'epoch': epoch_num_for_axis
             }
             self.wandb_manager.log_metrics(train_epoch_log_data, step=self.current_global_step, prefix="train")
 
-            val_epoch_log_data = {
-                'loss_total': val_metrics['avg_g_loss'],
-                'loss_l1': val_metrics['avg_l1_loss'],
-                'loss_perceptual': val_metrics['avg_perceptual_loss'],
-                'epoch': epoch_num_for_axis  # This provides data for 'val/epoch' x-axis
-            }
-            self.wandb_manager.log_metrics(val_epoch_log_data, step=self.current_global_step, prefix="val")
+            if self.val_loader and len(self.val_loader) > 0:  # Only log val if val_loader exists
+                val_epoch_log_data = {
+                    'loss_total': val_metrics['avg_g_loss'],
+                    'loss_l1': val_metrics['avg_l1_loss'],
+                    'loss_perceptual': val_metrics['avg_perceptual_loss'],
+                    'epoch': epoch_num_for_axis
+                }
+                self.wandb_manager.log_metrics(val_epoch_log_data, step=self.current_global_step, prefix="val")
 
             if (epoch + 1) % self.config.save_freq == 0:
                 self._save_checkpoint(epoch)
@@ -111,7 +118,7 @@ class Trainer:
             print(f"Epoch {epoch + 1}/{self.config.num_epochs} completed. Global Step: {self.current_global_step}")
             print(
                 f"  Train Loss: {train_metrics['avg_g_loss']:.4f} (L1: {train_metrics['avg_l1_loss']:.4f}, Perceptual: {train_metrics['avg_perceptual_loss']:.4f})")
-            if len(self.val_loader) > 0:
+            if self.val_loader and len(self.val_loader) > 0:
                 print(
                     f"  Val Loss: {val_metrics['avg_g_loss']:.4f} (L1: {val_metrics['avg_l1_loss']:.4f}, Perceptual: {val_metrics['avg_perceptual_loss']:.4f})")
             print(f"  Learning Rate: {current_lr:.6f}")
@@ -120,15 +127,19 @@ class Trainer:
 
     def _train_epoch(self, epoch):  # epoch is 0-indexed
         self.generator.train()
-        total_g_loss, total_l1_loss, total_perceptual_loss = 0, 0, 0
+        total_g_loss, total_l1_loss, total_perceptual_loss = 0.0, 0.0, 0.0
 
-        # Calculate starting global step for this epoch if not using self.current_global_step directly for batches
-        # For simplicity, self.current_global_step will be incremented inside the loop.
+        num_batches = len(self.train_loader)
+        if num_batches == 0:
+            print(f"Warning: Train loader for epoch {epoch + 1} is empty.")
+            return {'avg_g_loss': 0, 'avg_l1_loss': 0, 'avg_perceptual_loss': 0}
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1} Training")
         for i, images in enumerate(pbar):
+            self.current_global_step += 1  # Increment global step for each training batch processed.
+
             images = images.to(self.device)
-            with torch.no_grad():
+            with torch.no_grad():  # Encoder should not be trained here
                 embeddings = self.encoder(images)
             generated_images = self.generator(embeddings)
 
@@ -144,48 +155,44 @@ class Trainer:
             total_l1_loss += l1.item()
             total_perceptual_loss += perceptual.item()
 
-            self.current_global_step += 1  # Increment global step for each training batch processed.
-            # Assumes drop_last=True or careful handling if batch size varies.
-            # Or: self.current_global_step = epoch * len(self.train_loader) + i
-
             pbar.set_postfix(
                 {'g_loss': f"{g_loss.item():.4f}", 'l1': f"{l1.item():.4f}", 'perceptual': f"{perceptual.item():.4f}"})
 
-            if i % self.config.log_freq == 0:
+            if self.config.log_freq > 0 and i % self.config.log_freq == 0:
                 batch_metrics = {
-                    # Prefixes are handled by WandbManager or explicitly added here
-                    # Keep keys simple if WandbManager adds 'batch/' prefix
                     'loss_total': g_loss.item(),
                     'loss_l1': l1.item(),
                     'loss_perceptual': perceptual.item(),
-                    # 'batch_idx': i, # Informative but not essential for plotting if global step is primary x-axis
-                    # 'current_epoch': epoch + 1 # Also informative
                 }
                 self.wandb_manager.log_metrics(batch_metrics, step=self.current_global_step, prefix="batch")
 
-            if i % self.config.sample_freq == 0:
+            if self.config.sample_freq > 0 and i % self.config.sample_freq == 0:
                 self.wandb_manager.save_and_log_samples(
                     real_images=images, generated_images=generated_images,
                     sample_dir=self.sample_dir, epoch=epoch, batch_idx=i,
-                    current_global_step=self.current_global_step,  # Pass the current global step
+                    current_global_step=self.current_global_step,
                     prefix="train", overwrite=self.config.overwrite_samples
                 )
 
-        num_batches = len(self.train_loader)
         return {
-            'avg_g_loss': total_g_loss / num_batches if num_batches > 0 else 0,
-            'avg_l1_loss': total_l1_loss / num_batches if num_batches > 0 else 0,
-            'avg_perceptual_loss': total_perceptual_loss / num_batches if num_batches > 0 else 0
+            'avg_g_loss': total_g_loss / num_batches,
+            'avg_l1_loss': total_l1_loss / num_batches,
+            'avg_perceptual_loss': total_perceptual_loss / num_batches
         }
 
     def _validate_epoch(self, epoch, current_global_step_for_summary):  # epoch is 0-indexed
-        if not self.val_loader:  # Skip if no validation loader
+        if not self.val_loader or len(self.val_loader) == 0:
+            print(f"Warning: Val loader for epoch {epoch + 1} is empty or not defined.")
             return {'avg_g_loss': 0, 'avg_l1_loss': 0, 'avg_perceptual_loss': 0}
 
         self.generator.eval()
-        total_g_loss, total_l1_loss, total_perceptual_loss = 0, 0, 0
+        total_g_loss, total_l1_loss, total_perceptual_loss = 0.0, 0.0, 0.0
 
+        num_batches = len(self.val_loader)
         pbar = tqdm(self.val_loader, desc=f"Epoch {epoch + 1} Validation")
+
+        last_val_images = None  # To store the last batch for sample logging
+        last_val_generated_images = None
 
         with torch.no_grad():
             for i, images in enumerate(pbar):
@@ -203,31 +210,35 @@ class Trainer:
                 pbar.set_postfix({'g_loss': f"{g_loss.item():.4f}", 'l1': f"{l1.item():.4f}",
                                   'perceptual': f"{perceptual.item():.4f}"})
 
-            if len(self.val_loader) > 0:  # Log samples using last batch of val images
+                if i == num_batches - 1:  # Store last batch for samples
+                    last_val_images = images
+                    last_val_generated_images = generated_images
+
+            if last_val_images is not None and last_val_generated_images is not None:
                 self.wandb_manager.save_and_log_samples(
-                    real_images=images, generated_images=generated_images,
-                    sample_dir=self.sample_dir, epoch=epoch, batch_idx=None,
-                    current_global_step=current_global_step_for_summary,  # Use the passed global step
+                    real_images=last_val_images, generated_images=last_val_generated_images,
+                    sample_dir=self.sample_dir, epoch=epoch, batch_idx=None,  # No batch_idx for epoch summary sample
+                    current_global_step=current_global_step_for_summary,
                     prefix="val", overwrite=self.config.overwrite_samples
                 )
 
-        num_batches = len(self.val_loader)
         return {
-            'avg_g_loss': total_g_loss / num_batches if num_batches > 0 else 0,
-            'avg_l1_loss': total_l1_loss / num_batches if num_batches > 0 else 0,
-            'avg_perceptual_loss': total_perceptual_loss / num_batches if num_batches > 0 else 0
+            'avg_g_loss': total_g_loss / num_batches,
+            'avg_l1_loss': total_l1_loss / num_batches,
+            'avg_perceptual_loss': total_perceptual_loss / num_batches
         }
 
     def _save_checkpoint(self, epoch):  # epoch is 0-indexed
         try:
             checkpoint = {
-                'epoch': epoch,
-                'current_global_step': self.current_global_step,  # Save global step
+                'epoch': epoch,  # 0-indexed
+                'current_global_step': self.current_global_step,
                 'generator': self.generator.state_dict(),
                 'g_optimizer': self.g_optimizer.state_dict(),
                 'g_scheduler': self.g_scheduler.state_dict(),
-                'config': vars(self.config)
+                'config': vars(self.config)  # Save a copy of the config
             }
+            # Filename uses 1-indexed epoch for user readability
             filename = f"checkpoint_epoch_{epoch + 1:03d}.pth"
             filepath = os.path.join(self.checkpoint_dir, filename)
             torch.save(checkpoint, filepath)
@@ -236,22 +247,22 @@ class Trainer:
             print(f"Error: Checkpoint saving failed: {e}")
 
 
-# Configuration class
+# Configuration class (assuming it's defined as before)
 class Config:
     def __init__(self):
         # Data paths
         self.train_dir = "data/train"
         self.val_dir = "data/val"
-        self.test_dir = "data/test"
+        self.test_dir = "data/test"  # Not used in trainer, but good to have
         self.output_dir = "output"
 
         # Training parameters
-        self.batch_size = 32
+        self.batch_size = 32  # Make sure this is not larger than dataset size
         self.num_epochs = 100
         self.lr = 2e-4
-        self.beta1 = 0.5
-        self.lr_step_size = 20
-        self.lr_gamma = 0.5
+        self.beta1 = 0.5  # Adam beta1
+        self.lr_step_size = 20  # For StepLR scheduler
+        self.lr_gamma = 0.5  # For StepLR scheduler
         self.num_workers = 4
         self.seed = 42
 
@@ -266,22 +277,26 @@ class Config:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # W&B and logging settings
-        self.use_wandb = True
-        self.project_name = "face-generation"
-        self.run_name = f"face-gen-{self.embedding_size}-{self.img_size}"
-        self.wandb_folder = "wandb"  # W&B folder in output directory
-        self.wandb_mode = "online"  # online, offline, disabled
-        self.log_freq = 10
-        self.sample_freq = 100
-        self.save_freq = 5
+        self.use_wandb = True  # Set to False to disable W&B
+        self.project_name = "face-generation"  # Your W&B project name
+        self.run_name = f"face-gen-emb{self.embedding_size}-img{self.img_size}"  # Example run name
+        self.wandb_folder = "wandb"  # W&B specific files within output_dir
+        self.wandb_mode = "online"  # "online", "offline", or "disabled"
+
+        self.log_freq = 10  # Log batch metrics every N batches (0 to disable)
+        self.sample_freq = 100  # Log sample images every N batches (0 to disable)
+        self.save_freq = 5  # Save checkpoint every N epochs
 
         # File management
-        self.overwrite_samples = True  # Overwrite existing sample files
+        self.overwrite_samples = True  # Overwrite existing sample image files
 
 
 # Main function to start training
 def main():
     config = Config()
+    # You can override config parameters here if needed, e.g., from argparse
+    # config.batch_size = 16
+
     trainer = Trainer(config)
     trainer.train()
 
